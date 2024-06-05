@@ -1,4 +1,6 @@
 def registry = 'https://saidemy05.jfrog.io'
+def imageName = 'saidemy05.jfrog.io/valaxy-docker-local/ttrend'
+def version   = '2.1.2'
 pipeline {
     agent {
         node {
@@ -13,14 +15,14 @@ environment {
             steps {
                  echo "----------- build started ----------"
                 sh 'mvn clean deploy -Dmaven.test.skip=true'
-                 echo "----------- build complted ----------"
+                 echo "----------- build completed ----------"
             }
         }
         stage("test"){
             steps{
                 echo "----------- unit test started ----------"
                 sh 'mvn surefire-report:report'
-                 echo "----------- unit test Complted ----------"
+                 echo "----------- unit test Completed ----------"
             }
         }
 
@@ -56,7 +58,7 @@ environment {
                           "files": [
                             {
                               "pattern": "jarstaging/(*)",
-                              "target": "sai-libs-release-local/{1}",
+                              "target": "libs-release-local/{1}",
                               "flat": "false",
                               "props" : "${properties}",
                               "exclusions": [ "*.sha1", "*.md5"]
@@ -70,6 +72,29 @@ environment {
             
             }
         }   
+    }
+
+
+    stage(" Docker Build ") {
+      steps {
+        script {
+           echo '<--------------- Docker Build Started --------------->'
+           app = docker.build(imageName+":"+version)
+           echo '<--------------- Docker Build Ends --------------->'
+        }
+      }
+    }
+
+            stage (" Docker Publish "){
+        steps {
+            script {
+               echo '<--------------- Docker Publish Started --------------->'  
+                docker.withRegistry(registry, 'artifact-cred'){
+                    app.push()
+                }    
+               echo '<--------------- Docker Publish Ended --------------->'  
+            }
+        }
     }   
 }
 }
