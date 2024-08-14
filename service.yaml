@@ -1,0 +1,19 @@
+# --------------------------------------------
+# Kubernetes Service for valaxy-rtp Application
+# --------------------------------------------
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: valaxy-rtp-service             # Name of the Service
+  namespace: valaxy                    # Namespace where the Service will be created
+
+spec:
+  type: NodePort                       # Service type as NodePort to expose the service on a specific port of each node
+  selector:
+    app: valaxy-rtp                    # Selector to match the pods with label 'app: valaxy-rtp'
+
+  ports:
+  - nodePort: 30082                    # Node port on which the service will be exposed on each node
+    port: 8000                         # Port on which the service will be exposed within the cluster
+    targetPort: 8000                   # Target port on the container where the traffic will be directed
