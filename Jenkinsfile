@@ -1,4 +1,3 @@
-
 pipeline {
     // Define the agent to run the pipeline on a node with the label 'maven'
     agent {
@@ -17,8 +16,24 @@ pipeline {
         // Stage for building the project
         stage("build") {
             steps {
-                // Run Maven clean and deploy commands
-                sh 'mvn clean deploy'
+                // Log message to indicate build start
+                echo "----------- build started ----------"
+                // Run Maven clean and deploy commands, skipping tests
+                sh 'mvn clean deploy -Dmaven.test.skip=true'
+                // Log message to indicate build completion
+                echo "----------- build completed ----------"
+            }
+        }
+
+        // Stage for running unit tests
+        stage("test") {
+            steps {
+                // Log message to indicate unit test start
+                echo "----------- unit test started ----------"
+                // Run Maven Surefire report
+                sh 'mvn surefire-report:report'
+                // Log message to indicate unit test completion
+                echo "----------- unit test completed ----------"
             }
         }
 
