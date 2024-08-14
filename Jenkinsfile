@@ -3,7 +3,7 @@
 // Define the Docker registry URL and image name with version
 def registry = 'https://saidemy.jfrog.io'
 def imageName = 'saidemy.jfrog.io/valaxy-docker-local/ttrend'
-def version   = '2.1.3'
+def version   = '2.1.2'
 
 pipeline {
     // Define the agent to run the pipeline on a node labeled 'maven'
@@ -25,12 +25,9 @@ pipeline {
         // Stage 1: Build the project
         stage('Build') {
             steps {
-                // Beginning of the build stage
                 echo "=========== Build Stage ==========="
                 echo "----------- Build Started ----------"
-                // Execute Maven clean and deploy commands, skipping tests
                 sh 'mvn clean deploy -Dmaven.test.skip=true'
-                // End of the build stage
                 echo "----------- Build Completed ----------"
             }
         }
@@ -38,12 +35,9 @@ pipeline {
         // Stage 2: Run unit tests
         stage('Test') {
             steps {
-                // Beginning of the test stage
                 echo "=========== Test Stage ==========="
                 echo "----------- Unit Test Started ----------"
-                // Generate test reports using Maven Surefire plugin
                 sh 'mvn surefire-report:report'
-                // End of the test stage
                 echo "----------- Unit Test Completed ----------"
             }
         }
@@ -51,13 +45,10 @@ pipeline {
         // Stage 3: Analyze code with SonarQube
         stage('SonarQube Analysis') {
             environment {
-                // Set the SonarQube scanner home environment variable
                 scannerHome = tool 'valaxy-sonar-scanner'
             }
             steps {
-                // Beginning of the SonarQube analysis stage
                 echo "=========== SonarQube Analysis Stage ==========="
-                // Start SonarQube analysis
                 withSonarQubeEnv('valaxy-sonarqube-server') {
                     sh "${scannerHome}/bin/sonar-scanner"
                 }
@@ -68,12 +59,9 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 script {
-                    // Beginning of the quality gate stage
                     echo "=========== Quality Gate Stage ==========="
-                    // Start checking SonarQube quality gate
                     timeout(time: 1, unit: 'HOURS') {
                         def qg = waitForQualityGate()
-                        // Abort the pipeline if the quality gate fails
                         if (qg.status != 'OK') {
                             error "Pipeline aborted due to quality gate failure: ${qg.status}"
                         }
@@ -86,15 +74,10 @@ pipeline {
         stage('Jar Publish') {
             steps {
                 script {
-                    // Beginning of the JAR publishing stage
                     echo "=========== Jar Publish Stage ==========="
-                    // Start of the JAR publishing process
                     echo '<--------------- Jar Publish Started --------------->'
-                    // Connect to Artifactory server
                     def server = Artifactory.newServer(url: registry + "/artifactory", credentialsId: "artifact-cred")
-                    // Set properties for the JAR files
                     def properties = "buildid=${env.BUILD_ID},commitid=${GIT_COMMIT}"
-                    // Define the upload specification for JAR files
                     def uploadSpec = """{
                           "files": [
                             {
@@ -106,11 +89,9 @@ pipeline {
                             }
                          ]
                      }"""
-                    // Upload the JAR files to Artifactory
                     def buildInfo = server.upload(uploadSpec)
                     buildInfo.env.collect()
                     server.publishBuildInfo(buildInfo)
-                    // End of the JAR publishing process
                     echo '<--------------- Jar Publish Ended --------------->'   
                 }
             }
@@ -120,12 +101,9 @@ pipeline {
         stage('Docker Build') {
             steps {
                 script {
-                    // Beginning of the Docker build stage
                     echo "=========== Docker Build Stage ==========="
-                    // Start Docker image build process
                     echo '<--------------- Docker Build Started --------------->'
                     app = docker.build(imageName + ":" + version)
-                    // End Docker image build process
                     echo '<--------------- Docker Build Ends --------------->'
                 }
             }
@@ -135,29 +113,23 @@ pipeline {
         stage('Docker Publish') {
             steps {
                 script {
-                    // Beginning of the Docker publish stage
                     echo "=========== Docker Publish Stage ==========="
-                    // Start Docker image publishing process
                     echo '<--------------- Docker Publish Started --------------->'  
                     docker.withRegistry(registry, 'artifact-cred') {
                         app.push()
                     }    
-                    // End Docker image publishing process
                     echo '<--------------- Docker Publish Ended --------------->'  
                 }
             }
         }
 
-        // Stage 8: Deploy the application
-        stage('Deploy') {
+        // Stage 8: Deploy the application using Helm
+        stage("Helm Deploy") {
             steps {
                 script {
-                    // Beginning of the deployment stage
-                    echo "=========== Deploy Stage ==========="
-                    // Execute the deployment script
-                    sh './deploy.sh'
-                    // End of the deployment stage
-                    echo "----------- Deployment Completed ----------"
+                    echo '<--------------- Helm Deploy Started --------------->'
+                    sh 'helm install ttrend ttrend-0.1.0.tgz'
+                    echo '<--------------- Helm Deploy Ended --------------->'
                 }
             }
         }
