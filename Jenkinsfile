@@ -1,70 +1,80 @@
-// Define the URL of the Artifactory registry
+// Jenkins pipeline for building, testing, and deploying a Java project with Docker and Artifactory
+
+// Define the Docker registry URL and image name with version
 def registry = 'https://saidemy.jfrog.io'
+def imageName = 'saidemy.jfrog.io/valaxy-docker-local/ttrend'
+def version   = '2.1.2'
 
 pipeline {
-    // Define the agent to run the pipeline on a node with the label 'maven'
+    // Define the agent to run the pipeline on a node labeled 'maven'
     agent {
         node {
             label 'maven'
         }
     }
-
+    
     // Set environment variables for the pipeline
     environment {
+        // Add Maven to the system PATH
         PATH = "/opt/apache-maven-3.9.8/bin:$PATH"
     }
-
+    
     // Define the stages of the pipeline
     stages {
-        // Stage for building the project
-        stage("build") {
+        
+        // Stage 1: Build the project
+        stage("Build") {
             steps {
-                // Log message to indicate build start
-                echo "----------- build started ----------"
-                // Run Maven clean and deploy commands, skipping tests
+                // Beginning of the build stage
+                echo "=========== Build Stage ==========="
+                echo "----------- Build Started ----------"
+                // Execute Maven clean and deploy commands, skipping tests
                 sh 'mvn clean deploy -Dmaven.test.skip=true'
-                // Log message to indicate build completion
-                echo "----------- build completed ----------"
+                // End of the build stage
+                echo "----------- Build Completed ----------"
             }
         }
-
-        // Stage for running unit tests
-        stage("test") {
+        
+        // Stage 2: Run unit tests
+        stage("Test") {
             steps {
-                // Log message to indicate unit test start
-                echo "----------- unit test started ----------"
-                // Run Maven Surefire report
+                // Beginning of the test stage
+                echo "=========== Test Stage ==========="
+                echo "----------- Unit Test Started ----------"
+                // Generate test reports using Maven Surefire plugin
                 sh 'mvn surefire-report:report'
-                // Log message to indicate unit test completion
-                echo "----------- unit test completed ----------"
+                // End of the test stage
+                echo "----------- Unit Test Completed ----------"
             }
         }
 
-        // Stage for SonarQube analysis
-        stage('SonarQube analysis') {
+        // Stage 3: Analyze code with SonarQube
+        stage('SonarQube Analysis') {
             environment {
-                // Set the SonarQube scanner tool
+                // Set the SonarQube scanner home environment variable
                 scannerHome = tool 'valaxy-sonar-scanner'
             }
             steps {
-                // Execute SonarQube analysis within the SonarQube environment
+                // Beginning of the SonarQube analysis stage
+                echo "=========== SonarQube Analysis Stage ==========="
+                // Start SonarQube analysis
                 withSonarQubeEnv('valaxy-sonarqube-server') {
                     sh "${scannerHome}/bin/sonar-scanner"
                 }
             }
         }
 
-        // Stage for Quality Gate check
+        // Stage 4: Check SonarQube quality gate
         stage("Quality Gate") {
             steps {
                 script {
-                    // Set a timeout for the quality gate check
+                    // Beginning of the quality gate stage
+                    echo "=========== Quality Gate Stage ==========="
+                    // Start checking SonarQube quality gate
                     timeout(time: 1, unit: 'HOURS') {
-                        // Wait for the quality gate result
                         def qg = waitForQualityGate()
-                        // Check if the quality gate status is not OK
+                        // Abort the pipeline if the quality gate fails
                         if (qg.status != 'OK') {
-                            // Abort the pipeline if quality gate fails
                             error "Pipeline aborted due to quality gate failure: ${qg.status}"
                         }
                     }
@@ -72,35 +82,68 @@ pipeline {
             }
         }
 
-        // Stage for publishing the JAR files to Artifactory
+        // Stage 5: Publish the JAR files to Artifactory
         stage("Jar Publish") {
             steps {
                 script {
-                    // Log message to indicate JAR publish start
+                    // Beginning of the JAR publishing stage
+                    echo "=========== Jar Publish Stage ==========="
+                    // Start of the JAR publishing process
                     echo '<--------------- Jar Publish Started --------------->'
-                    // Define the Artifactory server
-                    def server = Artifactory.newServer url: registry + "/artifactory", credentialsId: "artifact-cred"
-                    // Set properties for the build
+                    // Connect to Artifactory server
+                    def server = Artifactory.newServer url:registry+"/artifactory", credentialsId:"artifact-cred"
+                    // Set properties for the JAR files
                     def properties = "buildid=${env.BUILD_ID},commitid=${GIT_COMMIT}"
-                    // Define the upload specification
+                    // Define the upload specification for JAR files
                     def uploadSpec = """{
                           "files": [
                             {
                               "pattern": "jarstaging/(*)",
                               "target": "sai-libs-release-local/{1}",
                               "flat": "false",
-                              "props": "${properties}",
+                              "props" : "${properties}",
                               "exclusions": [ "*.sha1", "*.md5"]
                             }
                          ]
                      }"""
-                    // Upload the files to Artifactory and collect build info
+                    // Upload the JAR files to Artifactory
                     def buildInfo = server.upload(uploadSpec)
                     buildInfo.env.collect()
-                    // Publish the build information to Artifactory
                     server.publishBuildInfo(buildInfo)
-                    // Log message to indicate JAR publish end
-                    echo '<--------------- Jar Publish Ended --------------->'
+                    // End of the JAR publishing process
+                    echo '<--------------- Jar Publish Ended --------------->'   
+                }
+            }
+        }
+
+        // Stage 6: Build the Docker image
+        stage("Docker Build") {
+            steps {
+                script {
+                    // Beginning of the Docker build stage
+                    echo "=========== Docker Build Stage ==========="
+                    // Start Docker image build process
+                    echo '<--------------- Docker Build Started --------------->'
+                    app = docker.build(imageName+":"+version)
+                    // End Docker image build process
+                    echo '<--------------- Docker Build Ends --------------->'
+                }
+            }
+        }
+
+        // Stage 7: Publish the Docker image to the registry
+        stage("Docker Publish") {
+            steps {
+                script {
+                    // Beginning of the Docker publish stage
+                    echo "=========== Docker Publish Stage ==========="
+                    // Start Docker image publishing process
+                    echo '<--------------- Docker Publish Started --------------->'  
+                    docker.withRegistry(registry, 'artifact-cred') {
+                        app.push()
+                    }    
+                    // End Docker image publishing process
+                    echo '<--------------- Docker Publish Ended --------------->'  
                 }
             }
         }
