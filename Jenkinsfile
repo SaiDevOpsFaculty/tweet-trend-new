@@ -3,7 +3,7 @@
 // Define the Docker registry URL and image name with version
 def registry = 'https://saidemy.jfrog.io'
 def imageName = 'saidemy.jfrog.io/valaxy-docker-local/ttrend'
-def version   = '2.1.2'
+def version   = '2.1.3'
 
 pipeline {
     // Define the agent to run the pipeline on a node labeled 'maven'
